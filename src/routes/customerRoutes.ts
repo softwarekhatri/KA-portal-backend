@@ -9,7 +9,7 @@ const router = Router();
 router.get("/", async (req, res) => {
   try {
     const page = parseInt(req.query.page as string, 10) || 1;
-    const limit = parseInt(req.query.limit as string, 10) || 25;
+    const limit = parseInt(req.query.limit as string, 10) || 10;
     const skip = (page - 1) * limit;
 
     const customers = await customer.find().skip(skip).limit(limit);
