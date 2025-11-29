@@ -1,5 +1,7 @@
 import { Router } from "express";
+import mongoose from "mongoose";
 import customer from "../models/customer";
+import Bill from "../models/bill";
 
 const router = Router();
 
@@ -10,10 +12,43 @@ router.get("/", async (req, res) => {
     const limit = parseInt(req.query.limit as string, 10) || 25;
     const skip = (page - 1) * limit;
 
-    const [data, total] = await Promise.all([
-      customer.find().skip(skip).limit(limit),
-      customer.countDocuments(),
+    const customers = await customer.find().skip(skip).limit(limit);
+    const total = await customer.countDocuments();
+
+    // Get bill stats for each customer
+    const customerIds = customers.map((c) => c._id);
+    type BillStat = {
+      _id: mongoose.Types.ObjectId;
+      totalBills: number;
+      totalDues: number;
+    };
+    const billStats: BillStat[] = await Bill.aggregate([
+      { $match: { customerId: { $in: customerIds } } },
+      {
+        $group: {
+          _id: "$customerId",
+          totalBills: { $sum: 1 },
+          totalDues: { $sum: { $ifNull: ["$balanceDues", 0] } },
+        },
+      },
     ]);
+
+    // Map stats to customer
+    const statsMap = new Map<string, BillStat>(
+      billStats.map((s: BillStat) => [String(s._id), s])
+    );
+    const data = customers.map((c) => {
+      const stats = statsMap.get(String(c._id)) || {
+        _id: c._id,
+        totalBills: 0,
+        totalDues: 0,
+      };
+      return {
+        ...c.toObject(),
+        totalBills: stats.totalBills,
+        totalDues: stats.totalDues,
+      };
+    });
 
     return res.send({
       data,
