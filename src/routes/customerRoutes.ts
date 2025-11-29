@@ -8,12 +8,23 @@ const router = Router();
 // Get paginated list of customers
 router.get("/", async (req, res) => {
   try {
+    const { query } = req.query;
     const page = parseInt(req.query.page as string, 10) || 1;
     const limit = parseInt(req.query.limit as string, 10) || 10;
     const skip = (page - 1) * limit;
 
-    const customers = await customer.find().skip(skip).limit(limit);
-    const total = await customer.countDocuments();
+    let filter = {};
+    if (query && typeof query === "string") {
+      const regex = new RegExp(query, "i");
+      filter = {
+        $or: [{ name: regex }, { phone: regex }, { address: regex }],
+      };
+    }
+
+    const [customers, total] = await Promise.all([
+      customer.find(filter).skip(skip).limit(limit),
+      customer.countDocuments(filter),
+    ]);
 
     // Get bill stats for each customer
     const customerIds = customers.map((c) => c._id);
@@ -100,36 +111,6 @@ router.delete("/:id", async (req, res) => {
     res.send({ message: "Customer deleted successfully" });
   } catch (err) {
     res.status(500).send({ error: "Failed to delete customer", details: err });
-  }
-});
-
-// search a customer by name or phone or address
-router.get("/search", async (req, res) => {
-  try {
-    const { query } = req.query;
-    const page = parseInt(req.query.page as string, 10) || 1;
-    const limit = parseInt(req.query.limit as string, 10) || 10;
-    const skip = (page - 1) * limit;
-    if (!query || typeof query !== "string") {
-      return res.status(400).send({ error: "Query parameter is required" });
-    }
-    const regex = new RegExp(query, "i"); // case-insensitive search
-    const filter = {
-      $or: [{ name: regex }, { phone: regex }, { address: regex }],
-    };
-    const [results, total] = await Promise.all([
-      customer.find(filter).skip(skip).limit(limit),
-      customer.countDocuments(filter),
-    ]);
-    res.send({
-      data: results,
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
-  } catch (err) {
-    res.status(500).send({ error: "Customer Search failed", details: err });
   }
 });
 
