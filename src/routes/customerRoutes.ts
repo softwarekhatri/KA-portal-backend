@@ -107,14 +107,27 @@ router.delete("/:id", async (req, res) => {
 router.get("/search", async (req, res) => {
   try {
     const { query } = req.query;
+    const page = parseInt(req.query.page as string, 10) || 1;
+    const limit = parseInt(req.query.limit as string, 10) || 10;
+    const skip = (page - 1) * limit;
     if (!query || typeof query !== "string") {
       return res.status(400).send({ error: "Query parameter is required" });
     }
     const regex = new RegExp(query, "i"); // case-insensitive search
-    const results = await customer.find({
+    const filter = {
       $or: [{ name: regex }, { phone: regex }, { address: regex }],
+    };
+    const [results, total] = await Promise.all([
+      customer.find(filter).skip(skip).limit(limit),
+      customer.countDocuments(filter),
+    ]);
+    res.send({
+      data: results,
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
     });
-    res.send({ data: results });
   } catch (err) {
     res.status(500).send({ error: "Customer Search failed", details: err });
   }
