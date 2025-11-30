@@ -52,7 +52,7 @@ const billSchema = new Schema(
         },
       },
     ],
-    payment: [
+    payments: [
       {
         _id: false,
         amountPaid: {
@@ -76,11 +76,15 @@ const billSchema = new Schema(
     ],
     totalAmount: {
       type: Number,
-      required: true,
+      required: false,
     },
     balanceDues: {
       type: Number,
       required: false,
+    },
+    billDate: {
+      type: Date,
+      required: true,
     },
   },
   {
