@@ -76,7 +76,7 @@ const billSchema = new Schema(
     ],
     totalAmount: {
       type: Number,
-      required: false,
+      required: true,
     },
     balanceDues: {
       type: Number,
