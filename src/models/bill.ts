@@ -3,6 +3,7 @@ import mongoose, { Schema } from "mongoose";
 enum PaymentMode {
   CASH = "CASH",
   ONLINE = "ONLINE",
+  DISCOUNT = "DISCOUNT",
 }
 
 enum MakingChargeType {
