@@ -13,6 +13,10 @@ enum MakingChargeType {
 
 const billSchema = new Schema(
   {
+    _id: {
+      type: String,
+      required: true,
+    },
     customerId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "customer",

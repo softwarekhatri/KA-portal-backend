@@ -6,7 +6,7 @@ import crypto from "crypto";
 const router = Router();
 
 // POST /bills (merged: paginated + filter/search)
-router.post("/", async (req, res) => {
+router.post("/getBills", async (req, res) => {
   try {
     const {
       search,
