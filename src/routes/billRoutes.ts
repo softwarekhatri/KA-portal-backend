@@ -1,11 +1,11 @@
 import { Router } from "express";
 import bill from "../models/bill";
-import mongoose from "mongoose";
 import crypto from "crypto";
 
 const router = Router();
 
 // POST /bills (merged: paginated + filter/search)
+// POST /getBills
 router.post("/getBills", async (req, res) => {
   try {
     const {
@@ -16,23 +16,27 @@ router.post("/getBills", async (req, res) => {
       limit: reqLimit,
       billId,
     } = req.body;
-    const page = parseInt(reqPage as string, 10) || 1;
-    const limit = parseInt(reqLimit as string, 10) || 25;
+
+    const page = parseInt(reqPage, 10) || 1;
+    const limit = parseInt(reqLimit, 10) || 25;
     const skip = (page - 1) * limit;
 
-    const match = {} as any;
-    // Bill ID filter
+    // If billId exists - fetch only single document (NO aggregation)
     if (billId) {
-      try {
-        match._id =
-          typeof billId === "string"
-            ? new mongoose.Types.ObjectId(billId)
-            : billId;
-      } catch (e) {
-        return res.status(400).send({ error: "Invalid billId format" });
-      }
+      const billDoc = await bill.findById(billId).populate("customerId"); // Customer reference must be populated
+      return res.json({
+        data: !billDoc ? [] : [billDoc],
+        page: 1,
+        limit: 1,
+        total: 1,
+        totalPages: 1,
+      });
     }
-    // Date Range Filter
+
+    // ----- Filter & Aggregation Pipeline -----
+    const match: any = {};
+
+    // Date filter
     if (startDate || endDate) {
       match.createdAt = {};
       if (startDate) match.createdAt.$gte = new Date(startDate);
@@ -40,6 +44,7 @@ router.post("/getBills", async (req, res) => {
     }
 
     const pipeline: any[] = [
+      { $match: match },
       {
         $lookup: {
           from: "customers",
@@ -49,52 +54,41 @@ router.post("/getBills", async (req, res) => {
         },
       },
       { $unwind: "$customer" },
-      { $match: match },
     ];
 
-    // Search (name / phone / address)
+    // Search filter
     if (search && typeof search === "string") {
       const regex = new RegExp(search, "i");
       const isNumeric = /^\d+$/.test(search);
-      if (isNumeric) {
-        pipeline.push({
-          $match: {
-            $or: [
-              { "customer.phone": { $regex: "^" + search } },
-              { "customer.name": regex },
-              { "customer.address": regex },
-            ],
-          },
-        });
-      } else {
-        pipeline.push({
-          $match: {
-            $or: [
-              { "customer.name": regex },
-              { "customer.address": regex },
-              { "customer.phone": { $regex: "^" + search } },
-            ],
-          },
-        });
-      }
+
+      pipeline.push({
+        $match: {
+          $or: [
+            { "customer.name": regex },
+            { "customer.address": regex },
+            ...(isNumeric
+              ? [{ "customer.phone": { $regex: "^" + search } }]
+              : []),
+          ],
+        },
+      });
     }
 
+    // Clone for count
+    const countPipeline = [...pipeline, { $count: "total" }];
+
     // Pagination
-    pipeline.push({ $skip: skip });
-    pipeline.push({ $limit: limit });
+    pipeline.push({ $skip: skip }, { $limit: limit });
 
-    // Run aggregation
-    const bills = await bill.aggregate(pipeline);
+    // Execute queries
+    const [bills, countResult] = await Promise.all([
+      bill.aggregate(pipeline),
+      bill.aggregate(countPipeline),
+    ]);
 
-    // For total count (without pagination)
-    const countPipeline = pipeline.filter(
-      (stage) => !("$skip" in stage) && !("$limit" in stage)
-    );
-    countPipeline.push({ $count: "total" });
-    const countResult = await bill.aggregate(countPipeline);
-    const total = countResult[0]?.total || 0;
+    const total = countResult?.[0]?.total || 0;
 
-    res.send({
+    return res.json({
       data: bills,
       page,
       limit,
@@ -102,7 +96,11 @@ router.post("/getBills", async (req, res) => {
       totalPages: Math.ceil(total / limit),
     });
   } catch (err) {
-    res.status(500).send({ error: "Failed to fetch bills", details: err });
+    const message = err instanceof Error ? err.message : String(err);
+    return res.status(500).json({
+      error: "Failed to fetch bills",
+      details: message,
+    });
   }
 });
 
