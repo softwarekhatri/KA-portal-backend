@@ -107,7 +107,7 @@ router.post("/getBills", async (req, res) => {
 });
 
 // Create a new bill with custom _id
-router.post("/create", async (req, res) => {
+router.post("/", async (req, res) => {
   try {
     // Generate unique billId: KA-<hex>
     let unique = false;
