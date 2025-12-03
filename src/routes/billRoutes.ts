@@ -4,7 +4,6 @@ import crypto from "crypto";
 
 const router = Router();
 
-// POST /bills (merged: paginated + filter/search)
 // POST /getBills
 router.post("/getBills", async (req, res) => {
   try {
@@ -24,8 +23,15 @@ router.post("/getBills", async (req, res) => {
     // If billId exists - fetch only single document (NO aggregation)
     if (billId) {
       const billDoc = await bill.findById(billId).populate("customerId"); // Customer reference must be populated
+      const formatted = billDoc
+        ? {
+            ...billDoc.toObject(),
+            customer: billDoc.customerId, // rename who was populated
+            customerId: billDoc.customerId?._id, // keep customerId
+          }
+        : null;
       return res.json({
-        data: !billDoc ? [] : [billDoc],
+        data: formatted ? [formatted] : [],
         page: 1,
         limit: 1,
         total: 1,
