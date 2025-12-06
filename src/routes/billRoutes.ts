@@ -171,62 +171,75 @@ router.delete("/:id", async (req, res) => {
 // Get api to return total customers, total bills, total paid amount, total dues and sales revenue of last 30 days per each day
 router.get("/summary", async (req, res) => {
   try {
-    const totalCustomers = await customer.countDocuments();
-    const totalBills = await bill.countDocuments();
-    const totalPaidAmountAgg = await bill.aggregate([
-      { $unwind: "$payments" },
-      { $group: { _id: null, totalPaid: { $sum: "$payments.amountPaid" } } },
-    ]);
-    const totalPaidAmount = (totalPaidAmountAgg[0]?.totalPaid || 0).toFixed();
-    const totalDuesAgg = await bill.aggregate([
-      { $group: { _id: null, totalDues: { $sum: "$balanceDues" } } },
-    ]);
-    const totalDues = (totalDuesAgg[0]?.totalDues || 0).toFixed();
-
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const result = await bill.aggregate([
+      {
+        $facet: {
+          totalBills: [{ $count: "count" }],
 
-    const salesRevenueAgg = await bill.aggregate([
-      { $match: { billDate: { $gte: thirtyDaysAgo } } },
-      { $unwind: "$payments" },
-      {
-        $group: {
-          _id: {
-            year: { $year: "$payments.paymentDate" },
-            month: { $month: "$payments.paymentDate" },
-            day: { $dayOfMonth: "$payments.paymentDate" },
-          },
-          dailyTotal: { $sum: "$payments.amountPaid" },
-        },
-      },
-      {
-        $project: {
-          _id: 0,
-          date: {
-            $dateFromParts: {
-              year: "$_id.year",
-              month: "$_id.month",
-              day: "$_id.day",
+          totalPaidAmount: [
+            { $unwind: "$payments" },
+            {
+              $group: {
+                _id: null,
+                totalPaid: { $sum: "$payments.amountPaid" },
+              },
             },
-          },
-          dailyTotal: 1,
+          ],
+          totalDues: [
+            {
+              $group: {
+                _id: null,
+                totalDues: { $sum: "$balanceDues" },
+              },
+            },
+          ],
+          salesRevenue: [
+            { $match: { billDate: { $gte: thirtyDaysAgo } } },
+            { $unwind: "$payments" },
+            {
+              $group: {
+                _id: {
+                  year: { $year: "$payments.paymentDate" },
+                  month: { $month: "$payments.paymentDate" },
+                  day: { $dayOfMonth: "$payments.paymentDate" },
+                },
+                dailyTotal: { $sum: "$payments.amountPaid" },
+              },
+            },
+            {
+              $project: {
+                _id: 0,
+                date: {
+                  $dateFromParts: {
+                    year: "$_id.year",
+                    month: "$_id.month",
+                    day: "$_id.day",
+                  },
+                },
+                dailyTotal: 1,
+              },
+            },
+            { $sort: { date: 1 } },
+          ],
         },
       },
-      { $sort: { date: 1 } },
     ]);
 
-    // Format sales revenue as array of { date, dailyTotal }
-    const salesRevenue = salesRevenueAgg.map((item) => ({
-      date: item.date,
-      dailyTotal: item.dailyTotal.toFixed(),
-    }));
+    // Extract results safely
+    const data = result[0];
+    const customersCount = await customer.countDocuments(); // still separate, but cheap (no unwind)
 
     res.send({
-      totalCustomers,
-      totalBills,
-      totalPaidAmount,
-      totalDues,
-      salesRevenue,
+      totalCustomers: customersCount,
+      totalBills: data.totalBills[0]?.count || 0,
+      totalPaidAmount: (data.totalPaidAmount[0]?.totalPaid || 0).toFixed(),
+      totalDues: (data.totalDues[0]?.totalDues || 0).toFixed(),
+      salesRevenue: data.salesRevenue.map((s: any) => ({
+        date: s.date,
+        dailyTotal: s.dailyTotal.toFixed(),
+      })),
     });
   } catch (err) {
     res.status(500).send({ error: "Failed to fetch summary", details: err });
