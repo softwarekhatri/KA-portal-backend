@@ -1,6 +1,7 @@
 import { Router } from "express";
 import bill from "../models/bill";
 import crypto from "crypto";
+import customer from "../models/customer";
 
 const router = Router();
 
@@ -164,6 +165,71 @@ router.delete("/:id", async (req, res) => {
     res.send(deletedBill);
   } catch (err) {
     res.status(500).send({ error: "Failed to delete bill", details: err });
+  }
+});
+
+// Get api to return total customers, total bills, total paid amount, total dues and sales revenue of last 30 days per each day
+router.get("/summary", async (req, res) => {
+  try {
+    const totalCustomers = await customer.countDocuments();
+    const totalBills = await bill.countDocuments();
+    const totalPaidAmountAgg = await bill.aggregate([
+      { $unwind: "$payments" },
+      { $group: { _id: null, totalPaid: { $sum: "$payments.amountPaid" } } },
+    ]);
+    const totalPaidAmount = (totalPaidAmountAgg[0]?.totalPaid || 0).toFixed();
+    const totalDuesAgg = await bill.aggregate([
+      { $group: { _id: null, totalDues: { $sum: "$balanceDues" } } },
+    ]);
+    const totalDues = (totalDuesAgg[0]?.totalDues || 0).toFixed();
+
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const salesRevenueAgg = await bill.aggregate([
+      { $match: { billDate: { $gte: thirtyDaysAgo } } },
+      { $unwind: "$payments" },
+      {
+        $group: {
+          _id: {
+            year: { $year: "$payments.paymentDate" },
+            month: { $month: "$payments.paymentDate" },
+            day: { $dayOfMonth: "$payments.paymentDate" },
+          },
+          dailyTotal: { $sum: "$payments.amountPaid" },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          date: {
+            $dateFromParts: {
+              year: "$_id.year",
+              month: "$_id.month",
+              day: "$_id.day",
+            },
+          },
+          dailyTotal: 1,
+        },
+      },
+      { $sort: { date: 1 } },
+    ]);
+
+    // Format sales revenue as array of { date, dailyTotal }
+    const salesRevenue = salesRevenueAgg.map((item) => ({
+      date: item.date,
+      dailyTotal: item.dailyTotal.toFixed(),
+    }));
+
+    res.send({
+      totalCustomers,
+      totalBills,
+      totalPaidAmount,
+      totalDues,
+      salesRevenue,
+    });
+  } catch (err) {
+    res.status(500).send({ error: "Failed to fetch summary", details: err });
   }
 });
 
