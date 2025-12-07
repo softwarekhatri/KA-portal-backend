@@ -108,6 +108,8 @@ router.delete("/:id", async (req, res) => {
     if (!deletedCustomer) {
       return res.status(404).send({ error: "Customer not found" });
     }
+    // Also delete associated bills
+    await Bill.deleteMany({ customerId: req.params.id });
     res.send({ message: "Customer deleted successfully" });
   } catch (err) {
     res.status(500).send({ error: "Failed to delete customer", details: err });
