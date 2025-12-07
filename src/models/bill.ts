@@ -111,4 +111,4 @@ billSchema.set("toJSON", { virtuals: true });
 billSchema.set("toObject", { virtuals: true });
 billSchema.set("id", false);
 
-export default mongoose.model<typeof billSchema>("bill", billSchema);
+export default mongoose.model("bill", billSchema);
