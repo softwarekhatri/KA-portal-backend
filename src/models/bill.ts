@@ -99,6 +99,7 @@ const billSchema = new Schema(
 // Index for customerId and createdAt (for date range queries)
 billSchema.index({ customerId: 1 });
 billSchema.index({ createdAt: -1 });
+billSchema.index({ billDate: -1 });
 
 billSchema.virtual("customer", {
   ref: "customer",

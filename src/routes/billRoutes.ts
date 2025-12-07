@@ -45,9 +45,9 @@ router.post("/getBills", async (req, res) => {
 
     // Date filter
     if (startDate || endDate) {
-      match.createdAt = {};
-      if (startDate) match.createdAt.$gte = new Date(startDate);
-      if (endDate) match.createdAt.$lte = new Date(endDate);
+      match.billDate = {};
+      if (startDate) match.billDate.$gte = new Date(startDate);
+      if (endDate) match.billDate.$lte = new Date(endDate);
     }
 
     const pipeline: any[] = [
